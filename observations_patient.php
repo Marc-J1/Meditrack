@@ -1,6 +1,10 @@
 <?php
 session_start();
+include 'includes/auto_track.php';
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'Accès à observation patient');
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");

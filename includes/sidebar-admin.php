@@ -32,7 +32,12 @@
     <span class="pc-mtext">Ajouter un médecin</span>
   </a>
 </li>
-
+<li class="pc-item">
+  <a href="observabilite_globale.php" class="pc-link">
+    <span class="pc-micon"><i data-feather="edit"></i></span>
+    <span class="pc-mtext">Historique general</span>
+  </a>
+</li>
 <!-- BROUILLON: 
 <li class="pc-item">
   <a href="modifier_medecin.php" class="pc-link">
@@ -54,7 +59,7 @@
 <li class="pc-item">
   <a href="liste_medecins.php" class="pc-link">
     <span class="pc-micon"><i data-feather="list"></i></span>
-    <span class="pc-mtext">Liste des médecins</span>
+    <span class="pc-mtext">Liste des utilisateurs</span>
   </a>
 </li>
 

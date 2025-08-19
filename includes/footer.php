@@ -3,17 +3,19 @@
     <div class="grid grid-cols-12 gap-1.5">
       <div class="col-span-12 sm:col-span-6 my-1">
         <p class="m-0">
-          <a href="https://codedthemes.com/" target="_blank">CodedThemes</a>, Built with ♥
+          <a href="https://codedthemes.com/" target="_blank"> </a>
         </p>
       </div>
       <div class="col-span-12 sm:col-span-6 my-1 justify-self-end">
-        <p class="inline-block max-sm:mr-3 sm:ml-2">Distributed by <a href="https://themewagon.com" target="_blank">Themewagon</a></p>
+        <p class="inline-block max-sm:mr-3 sm:ml-2"> <a href="https://themewagon.com" target="_blank"> </a></p>
       </div>
     </div>
   </div>
 </footer>
 
 <!-- Required JS -->
+ <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script src="DattaAble-1.0.0/dist/assets/js/plugins/simplebar.min.js"></script>
 <script src="DattaAble-1.0.0/dist/assets/js/plugins/popper.min.js"></script>
 <script src="DattaAble-1.0.0/dist/assets/js/icon/custom-icon.js"></script>

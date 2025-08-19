@@ -1,27 +1,27 @@
 <?php
 session_start();
 require_once 'db.php';
+include 'includes/auto_track.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'Accès à ajouter observation');
 
-// Vérifie que l'utilisateur est connecté comme médecin
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
     exit();
 }
 
-// Vérifie que l'id du patient est fourni
 if (!isset($_GET['id_patient'])) {
     header("Location: lister_patients.php");
     exit();
 }
 
 $id_patient = $_GET['id_patient'];
-$id_utilisateur = $_SESSION['user']['id_utilisateur'] ?? null;
+$id_utilisateur = $_SESSION['user']['id'] ?? null;
 $id_consultation = $_GET['id_consultation'] ?? null;
 
 $errors = [];
-$success = false;
 
-// Traitement du formulaire
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $type_observation = $_POST['type_observation'] ?? 'Suivi';
     $contenu = trim($_POST['contenu'] ?? '');
@@ -44,13 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $contenu
             ]);
 
-            // Redirection vers les détails du patient
             if ($id_consultation) {
-    header("Location: voir_consultation.php?id=$id_consultation&success=observation");
-} else {
-    header("Location: details_patient.php?id=$id_patient&success=observation");
-}
-
+                header("Location: voir_consultation.php?id=$id_consultation&success=observation");
+            } else {
+                header("Location: details_patient.php?id=$id_patient&success=observation");
+            }
             exit();
 
         } catch (PDOException $e) {
@@ -58,11 +56,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
 ?>
 
 <?php include 'includes/header.php'; ?>
 <?php include 'includes/sidebar-medecin.php'; ?>
+
+<!-- SweetAlert2 pour le toast -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<?php if (isset($_GET['success']) && $_GET['success'] === 'observation'): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'success',
+    title: "Observation ajoutée avec succès",
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#333',
+    color: '#fff'
+  });
+});
+</script>
+<?php endif; ?>
 
 <div class="pc-container">
   <div class="pc-content">
@@ -98,9 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <textarea name="contenu" class="form-control" rows="5" placeholder="Détail de l'observation..."><?= htmlspecialchars($_POST['contenu'] ?? '') ?></textarea>
           </div>
 
-          <button type="submit" class="btn btn-primary">
-            <i class="ti ti-device-floppy"></i> Enregistrer
-          </button>
+          <div class="col-span-12 text-end">
+            <button type="submit" class="btn btn-success">Enregistrer</button>
+            <a href="details_patient.php?id=<?= $id_patient ?>" class="btn btn-secondary">Annuler</a>
+          </div>
         </form>
       </div>
     </div>

@@ -1,6 +1,11 @@
 <?php
 session_start();
+
 require_once 'db.php';
+include 'includes/auto_track.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'A accedé a la creation d\'ordonnance');
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
@@ -15,11 +20,9 @@ if (!isset($_GET['id'])) {
 $patient_id = $_GET['id'];
 $id_consultation = isset($_GET['id_consultation']) ? $_GET['id_consultation'] : null;
 
-
-// Vérifier que le patient existe et appartient au médecin
+// Vérifier que le patient existe
 $stmt = $pdo->prepare("SELECT * FROM patients WHERE id_patient = ?");
 $stmt->execute([$patient_id]);
-
 $patient = $stmt->fetch();
 
 if (!$patient) {
@@ -27,49 +30,57 @@ if (!$patient) {
     exit();
 }
 
-// Traitement du formulaire
+// ----- Traitement du formulaire -----
+$errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $medicaments = trim($_POST['medicaments']);
-    $posologie = trim($_POST['posologie']);
-    $duree_traitement = trim($_POST['duree_traitement']);
-    $notes = trim($_POST['notes']);
+    // ✅ Tout est saisi dans "notes" désormais
+    $notes  = trim($_POST['notes'] ?? '');
     $statut = $_POST['statut'] ?? 'active';
-    
-    $errors = [];
-    
-    if (empty($medicaments)) {
-        $errors[] = "Les médicaments sont obligatoires";
+
+    if ($notes === '') {
+        $errors[] = "L’ordonnance ne peut pas être vide.";
     }
-    
+
     if (empty($errors)) {
         try {
-           $stmt = $pdo->prepare("
-    INSERT INTO ordonnances (id_patient, id_utilisateur, date_ordonnance, medicaments, posologie, duree_traitement, notes, statut, id_consultation) 
-    VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)
-");
-$stmt->execute([
-    $patient_id,
-    $_SESSION['user']['id'], // médecin connecté
-    $medicaments,
-    $posologie,
-    $duree_traitement,
-    $notes,
-    $statut,
-    $id_consultation
-]);
-
+            $stmt = $pdo->prepare("
+                INSERT INTO ordonnances (
+                    id_patient, id_utilisateur, date_ordonnance, medicaments, posologie, duree_traitement, notes, statut, id_consultation
+                ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)
+            ");
+            // Les anciens champs deviennent vides (compatibilité BDD)
+            $stmt->execute([
+                $patient_id,
+                $_SESSION['user']['id'],
+                '',         // medicaments (vide)
+                '',         // posologie (vide)
+                '',         // duree_traitement (vide)
+                $notes,     // ✅ toute l'ordonnance dans notes
+                $statut,
+                $id_consultation
+            ]);
 
             $ordonnance_id = $pdo->lastInsertId();
-           if ($id_consultation) {
-    header("Location: voir_consultation.php?id=$id_consultation&success=ordonnance");
-} else {
-    header("Location: voir_ordonance.php?id=$ordonnance_id&success=Ordonnance créée avec succès");
-}
+            $patient_nom = $patient['nom'] . ' ' . $patient['prenom'];
+            // Log simplifié
+            logCreation('ordonnance.php', "Ordonnance créée pour $patient_nom (ID ordonnance: $ordonnance_id)");
 
+            // ✅ Redirection :
+            // - depuis une consultation -> retour consultation avec toast
+            // - sinon -> page de l'ordonnance avec toast
+            if ($id_consultation) {
+                header("Location: voir_consultation.php?id=" . urlencode($id_consultation) . "&success=ordonnance");
+            } else {
+                header("Location: voir_ordonance.php?id=" . urlencode($ordonnance_id) . "&success=1");
+            }
             exit();
         } catch (Exception $e) {
-            $errors[] = "Erreur lors de la création de l'ordonnance";
+            header("Location: creer_ordonnance.php?id=" . urlencode($patient_id) . "&error=1");
+            exit();
         }
+    } else {
+        header("Location: creer_ordonnance.php?id=" . urlencode($patient_id) . "&error=1");
+        exit();
     }
 }
 
@@ -77,12 +88,32 @@ include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
 ?>
 
+<!-- Toast SweetAlert uniquement si erreur sur cette page -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<?php if (isset($_GET['error']) && $_GET['error'] == 1): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'error',
+    title: "Erreur lors de la création de l’ordonnance",
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#333',
+    color: '#fff'
+  });
+});
+</script>
+<?php endif; ?>
+
 <div class="pc-container">
   <div class="pc-content">
     <div class="page-header">
       <div class="d-flex justify-content-between align-items-center">
         <h4 class="mb-3">Nouvelle Ordonnance</h4>
-        <a href="details_patient.php?id=<?= $patient_id ?>" class="btn btn-secondary">
+        <a href="details_patient.php?id=<?= htmlspecialchars($patient_id) ?>" class="btn btn-secondary">
           <i class="ti ti-arrow-left"></i> Retour au patient
         </a>
       </div>
@@ -96,9 +127,13 @@ include 'includes/sidebar-medecin.php';
         </h5>
       </div>
       <div class="card-body">
-        <h6><?= htmlspecialchars($patient['nom'] . ' ' . $patient['prenom']) ?></h6>
+        <?php
+          $civilite = (strtoupper(trim((string)$patient['sexe'])) === 'F') ? 'Mme' : 'Ms';
+          $nom_complet = $civilite . ' ' . $patient['nom'] . ' ' . $patient['prenom'];
+        ?>
+        <h6><?= htmlspecialchars($nom_complet) ?></h6>
         <small class="text-muted">
-          <?= htmlspecialchars($patient['sexe']) ?> - 
+          <?= htmlspecialchars($patient['sexe']) ?> -
           <?= date('d/m/Y', strtotime($patient['date_naissance'])) ?>
         </small>
       </div>
@@ -112,66 +147,31 @@ include 'includes/sidebar-medecin.php';
         </h5>
       </div>
       <div class="card-body">
-        <?php if (!empty($errors)): ?>
-        <div class="alert alert-danger">
-          <ul class="mb-0">
-            <?php foreach ($errors as $error): ?>
-            <li><?= htmlspecialchars($error) ?></li>
-            <?php endforeach; ?>
-          </ul>
-        </div>
-        <?php endif; ?>
 
-        <form method="POST">
+        <form method="POST" id="form-ordonnance">
+          <!-- ✅ Un seul champ : notes (ordonnance complète) -->
           <div class="row">
             <div class="col-md-12">
               <div class="mb-3">
-                <label class="form-label fw-bold">Médicaments prescrits <span class="text-danger">*</span></label>
-                <textarea name="medicaments" class="form-control" rows="5" required 
-                          placeholder="Exemple:&#10;- Paracétamol 500mg&#10;- Ibuprofène 400mg&#10;- Amoxicilline 500mg"><?= htmlspecialchars($_POST['medicaments'] ?? '') ?></textarea>
-                <small class="form-text text-muted">Listez les médicaments avec leurs dosages</small>
+                <label class="form-label fw-bold">Notes (ordonnance complète) <span class="text-danger">*</span></label>
+                <textarea name="notes" class="form-control" rows="10" required
+                  placeholder="Exemples :
+Paracétamol 500mg — 1 cp 3x/j pendant 7 jours
+Ibuprofène 400mg — 1 cp matin et soir
+Recommandations : éviter l’alcool, boire beaucoup d’eau"><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
               </div>
             </div>
           </div>
 
+          <!-- Statut -->
           <div class="row">
-            <div class="col-md-12">
-              <div class="mb-3">
-                <label class="form-label fw-bold">Posologie</label>
-                <textarea name="posologie" class="form-control" rows="4" 
-                          placeholder="Exemple:&#10;- Paracétamol: 1 comprimé 3 fois par jour après les repas&#10;- Ibuprofène: 1 comprimé matin et soir&#10;- Amoxicilline: 1 gélule toutes les 8 heures"><?= htmlspecialchars($_POST['posologie'] ?? '') ?></textarea>
-                <small class="form-text text-muted">Précisez la fréquence et les modalités de prise</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="col-md-6">
-              <div class="mb-3">
-                <label class="form-label fw-bold">Durée du traitement</label>
-                <input type="text" name="duree_traitement" class="form-control" 
-                       value="<?= htmlspecialchars($_POST['duree_traitement'] ?? '') ?>"
-                       placeholder="Ex: 7 jours, 2 semaines, 1 mois">
-              </div>
-            </div>
             <div class="col-md-6">
               <div class="mb-3">
                 <label class="form-label fw-bold">Statut</label>
                 <select name="statut" class="form-select">
-                  <option value="active" <?= ($_POST['statut'] ?? 'active') === 'active' ? 'selected' : '' ?>>Active</option>
-                 
+                  <option value="active"   <?= ($_POST['statut'] ?? 'active') === 'active' ? 'selected' : '' ?>>Active</option>
                   <option value="terminee" <?= ($_POST['statut'] ?? '') === 'terminee' ? 'selected' : '' ?>>Terminée</option>
                 </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="col-md-12">
-              <div class="mb-3">
-                <label class="form-label fw-bold">Notes et recommandations</label>
-                <textarea name="notes" class="form-control" rows="3" 
-                          placeholder="Recommandations particulières, effets secondaires à surveiller, etc."><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
               </div>
             </div>
           </div>
@@ -180,7 +180,7 @@ include 'includes/sidebar-medecin.php';
             <button type="submit" class="btn btn-primary">
               <i class="ti ti-device-floppy"></i> Créer l'ordonnance
             </button>
-            <a href="details_patient.php?id=<?= $patient_id ?>" class="btn btn-secondary">
+            <a href="details_patient.php?id=<?= htmlspecialchars($patient_id) ?>" class="btn btn-secondary">
               <i class="ti ti-x"></i> Annuler
             </a>
           </div>
@@ -194,20 +194,8 @@ include 'includes/sidebar-medecin.php';
 <?php include 'includes/footer.php'; ?>
 
 <style>
-  .form-label.fw-bold {
-    color: #495057;
-  }
-  
-  .text-danger {
-    color: #dc3545 !important;
-  }
-  
-  .form-text {
-    font-size: 0.875rem;
-    color: #6c757d;
-  }
-  
-  .alert {
-    border-radius: 0.5rem;
-  }
+  .form-label.fw-bold { color: #495057; }
+  .text-danger { color: #dc3545 !important; }
+  .form-text { font-size: 0.875rem; color: #6c757d; }
+  .alert { border-radius: 0.5rem; }
 </style>

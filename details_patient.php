@@ -1,6 +1,10 @@
  <?php
 session_start();
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+include 'includes/auto_track.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'A consulté les détails de un patients ');
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
@@ -90,11 +94,36 @@ $age = $aujourd_hui->diff($date_naissance)->y;
 
 include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
-?><link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+?>
+<?php
+$type_message = '';
+$contenu_message = '';
+
+if (isset($_GET['success']) && $_GET['success'] === 'modification') {
+    $type_message = 'success';
+    $contenu_message = 'Patient modifié avec succès !';
+} elseif (isset($_GET['error'])) {
+    $type_message = 'danger';
+    $contenu_message = htmlspecialchars($_GET['error']);
+}
+?>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 
 
 <div class="pc-container">
   <div class="pc-content">
+    <?php if (!empty($contenu_message)): ?>
+<div class="toast-container position-fixed top-0 end-0 p-3">
+  <div class="toast align-items-center text-bg-<?= $type_message ?> border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body"><?= $contenu_message ?></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fermer"></button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
     <div class="page-header">
       <div class="d-flex justify-content-between align-items-center">
         <h4 class="mb-3">Détails du Patient</h4>
@@ -484,6 +513,7 @@ $observation = $stmt->fetch();
             <th>Service demandeur</th>
             <th>Renseignement clinique</th>
             <th>Médecin</th>
+             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -495,6 +525,11 @@ $observation = $stmt->fetch();
             <td><?= htmlspecialchars(substr($examen['service_demandeur'], 0, 50)) ?><?= strlen($examen['service_demandeur']) > 50 ? '...' : '' ?></td>
             <td><?= htmlspecialchars(substr($examen['renseignement_clinique'], 0, 100)) ?><?= strlen($examen['renseignement_clinique']) > 100 ? '...' : '' ?></td>
             <td><?= htmlspecialchars($examen['medecin']) ?></td>
+            <td>
+                  <a href="voir_bon_examen.php?id=<?= $examen['id'] ?>" class="btn btn-outline-info btn-sm" title="Voir détails">
+                    <i class="ti ti-eye"></i>
+                  </a>
+                </td>
           </tr>
           <?php endforeach; ?>
         </tbody>
@@ -534,7 +569,7 @@ $observation = $stmt->fetch();
               <tr>
                 <th>Date</th>
                 <th>Observation</th>
-                <th>Auteur</th>
+                <th>Medecin</th>
                 <th>Diagnostic</th>
                 <th>Actions</th>
               </tr>
@@ -546,7 +581,7 @@ $observation = $stmt->fetch();
                   <?= date('d/m/Y H:i', strtotime($obs['date_observation'])) ?>
                 </td>
                 <td><?= htmlspecialchars(substr($obs['contenu'], 0, 100)) ?><?= strlen($obs['contenu']) > 100 ? '...' : '' ?></td>
-                <td><?= htmlspecialchars($obs['auteur'] ?? 'Inconnu') ?></td>
+                <td><?= htmlspecialchars($obs['auteur'] ) ?></td>
 
                 <td><?= htmlspecialchars($obs['diagnostic'] ?? 'Non spécifié') ?></td>
                 <td>
@@ -593,7 +628,7 @@ $observation = $stmt->fetch();
             <thead class="table-light">
               <tr>
                 <th>Date</th>
-                <th>Médicaments</th>
+                <th>Prescriptions</th>
                 <th>Médecin</th>
                 <th>Statut</th>
                 <th>Actions</th>
@@ -605,7 +640,7 @@ $observation = $stmt->fetch();
                 <td data-sort="<?= strtotime($ord['date_ordonnance']) ?>">
                   <?= date('d/m/Y', strtotime($ord['date_ordonnance'])) ?>
                 </td>
-                <td><?= htmlspecialchars(substr($ord['medicaments'], 0, 100)) ?><?= strlen($ord['medicaments']) > 100 ? '...' : '' ?></td>
+                <td><?= htmlspecialchars(substr($ord['notes'], 0, 100)) ?><?= strlen($ord['notes']) > 100 ? '...' : '' ?></td>
                 <td><?= htmlspecialchars($ord['nom_medecin'] ?? 'Inconnu') ?></td>
 
                 <td>

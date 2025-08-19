@@ -42,7 +42,24 @@
     <span class="pc-micon"><i data-feather="edit"></i></span>
     <span class="pc-mtext">Historique Medicale</span>
   </a>
+
 </li>
+<!-- AJOUTER CE CODE dans la sidebar pour les médecins principaux -->
+<?php if (isset($_SESSION['user']['statut']) && $_SESSION['user']['statut'] === 'principal'): ?>
+    <li class="pc-item">
+        <a href="historique_patients.php" class="pc-link">
+            <span class="pc-micon">
+                <i class="feather icon-clock"></i>
+                <!-- ou utilisez une icône emoji si vous préférez -->
+                <!-- 📜 -->
+            </span>
+            <span class="pc-mtext">Historique Patients</span>
+        </a>
+    </li>
+<?php endif; ?>
+
+<!-- Alternative avec emoji si vous n'avez pas d'icônes Feather -->
+
 <!--
 <li class="pc-item">
   <a href="supprimer_patient.php" class="pc-link">

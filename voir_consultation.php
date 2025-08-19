@@ -1,6 +1,9 @@
 <?php
 session_start();
+include 'includes/auto_track.php';
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
@@ -116,7 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_consultation']
     if (!empty($date_consultation) && !empty($motif)) {
         $stmt = $pdo->prepare("UPDATE consultations SET date_consultation = ?, motif = ?, diagnostic = ?, notes = ?, statut = ? WHERE id = ?");
         $stmt->execute([$date_consultation, $motif, $diagnostic, $notes, $statut, $consultation_id]);
-        header("Location: voir_consultation.php?id=$consultation_id&success=1");
+        // on reste sur la même page avec un flag de succès (modification)
+        header("Location: voir_consultation.php?id=$consultation_id&success=modification");
         exit();
     }
 }
@@ -124,6 +128,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_consultation']
 include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
 ?>
+
+<!-- SweetAlert2 (toast) -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<?php
+// Mapping des titres pour les toasts de succès
+$successTitle = null;
+if (isset($_GET['success'])) {
+    $map = [
+        'ordonnance'   => "Ordonnance créée avec succès",
+        'observation'  => "Observation ajoutée avec succès",
+        'bon_examen'   => "Bon d'examen créé avec succès",
+        'modification' => "Consultation modifiée avec succès",
+        '1'            => "Action réalisée avec succès"
+    ];
+    $key = $_GET['success'];
+    $successTitle = $map[$key] ?? $map['1'];
+}
+?>
+<?php if ($successTitle): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'success',
+    title: <?= json_encode($successTitle) ?>,
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#333',
+    color: '#fff'
+  });
+});
+</script>
+<?php elseif (isset($_GET['error'])): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'error',
+    title: <?= json_encode($_GET['error']) ?>,
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#333',
+    color: '#fff'
+  });
+});
+</script>
+<?php endif; ?>
 
 <div class="pc-container">
     <div class="pc-content">
@@ -236,7 +291,7 @@ include 'includes/sidebar-medecin.php';
         </div>
         <?php endif; ?>
 
-        <!-- SECTION MODIFIÉE : Documents liés à cette consultation -->
+        <!-- Documents liés à cette consultation -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="card-title mb-0"><i class="ti ti-files"></i> Documents liés à cette consultation</h5>
@@ -329,19 +384,19 @@ include 'includes/sidebar-medecin.php';
             <div class="card-body">
                 <div class="d-flex gap-2 flex-wrap">
                     <a href="ajouter_observation.php?id_patient=<?= $consultation['id_patient'] ?>&id_consultation=<?= $consultation['id'] ?>" class="btn btn-warning">
-  <i class="ti ti-eye-plus"></i>Ajouter observation 
-</a>
+                        <i class="ti ti-eye-plus"></i> Ajouter observation 
+                    </a>
 
                     <a href="ordonance_patient.php?id=<?= $consultation['id_patient'] ?>&id_consultation=<?= $consultation['id'] ?>" class="btn btn-success">
                         <i class="ti ti-file-text"></i> Nouvelle Ordonnance
                     </a>
+                
+                    <a href="bon_examen.php?id_patient=<?= $consultation['id_patient'] ?>&id_consultation=<?= $consultation['id'] ?>" class="btn btn-primary">
+                        <i class="ti ti-vial"></i> Créer un bon d'examen
+                    </a>
                     <a href="nouvelle_consultation.php?id=<?= $consultation['id_patient'] ?>" class="btn btn-warning">
                         <i class="ti ti-calendar-plus"></i> nouvelle consultation
                     </a>
-                    <a href="bon_examen.php?id_patient=<?= $consultation['id_patient'] ?>&id_consultation=<?= $consultation['id'] ?>" class="btn btn-primary">
-  <i class="ti ti-vial"></i> Créer un bon d'examen
-</a>
-
                 </div>
             </div>
         </div>
@@ -360,59 +415,31 @@ include 'includes/sidebar-medecin.php';
 <script>
 $(document).ready(function() {
     $('#documentsTable').DataTable({
-        "language": {
-            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json"
+        language: {
+            url: "https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json" // HTTPS pour éviter CORS
         },
-        "pageLength": 10,
-        "responsive": true,
-        "order": [[0, "desc"]], // Trier par date décroissante
-        "columnDefs": [
-            { "orderable": false, "targets": [4, 5, 6] } // Désactiver le tri sur les colonnes actions
+        pageLength: 10,
+        responsive: true,
+        order: [[0, "desc"]],
+        columnDefs: [
+            { orderable: false, targets: [4, 5, 6] }
         ],
-        "paging": false, // Désactiver la pagination car il n'y a qu'une ligne
-        "searching": false, // Désactiver la recherche car il n'y a qu'une ligne
-        "info": false // Désactiver les informations de pagination
+        paging: false,
+        searching: false,
+        info: false
     });
 });
 </script>
 
 <style>
-.card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-}
-.form-control-plaintext {
-    margin-bottom: 0;
-    border-bottom: 1px solid #e9ecef;
-    padding-bottom: 0.5rem;
-}
-.badge {
-    font-size: 0.875rem;
-}
-.bg-light {
-    background-color: #f8f9fa !important;
-}
-.border {
-    border: 1px solid #dee2e6 !important;
-}
-
+.card-header { background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+.form-control-plaintext { margin-bottom: 0; border-bottom: 1px solid #e9ecef; padding-bottom: 0.5rem; }
+.badge { font-size: 0.875rem; }
+.bg-light { background-color: #f8f9fa !important; }
+.border { border: 1px solid #dee2e6 !important; }
 /* Styles pour le tableau des documents */
-#documentsTable {
-    font-size: 0.9rem;
-}
-
-#documentsTable td {
-    vertical-align: middle;
-}
-
-.text-truncate {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.btn-sm {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-}
+#documentsTable { font-size: 0.9rem; }
+#documentsTable td { vertical-align: middle; }
+.text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn-sm { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
 </style>

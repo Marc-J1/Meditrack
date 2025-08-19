@@ -1,7 +1,11 @@
 <?php
 // Connexion à la base de données (à adapter selon votre configuration)
+include 'includes/auto_track.php';
 require_once 'db.php';
 include 'includes/header.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'A consulté l\'historique médicale');
 
 
 
@@ -375,8 +379,8 @@ $current_type = isset($_GET['type']) && isset($history_types[$_GET['type']]) ? $
             { data: 'medecin', title: 'Médecin', type: 'medecin' },
             { data: 'motif', title: 'Motif', type: 'text' },
             { data: 'diagnostic', title: 'Diagnostic', type: 'text' },
-            { data: 'statut', title: 'Statut', type: 'status' },
-            { data: null, title: 'Actions', type: 'actions' }
+            { data: 'statut', title: 'Statut', type: 'status' }
+           
         ],
         statuses: [
             { value: 'programmee', text: 'Programmée' },
@@ -386,14 +390,12 @@ $current_type = isset($_GET['type']) && isset($history_types[$_GET['type']]) ? $
     },
     ordonnances: {
         columns: [
-            { data: 'date_ordonnance', title: 'Date', type: 'date' },
-            { data: 'patient', title: 'Patient', type: 'patient' },
-            { data: 'medecin', title: 'Médecin', type: 'medecin' },
-            { data: 'medicaments', title: 'Médicaments', type: 'text' },
-            { data: 'posologie', title: 'Posologie', type: 'text' },
-            { data: 'duree_traitement', title: 'Durée', type: 'text' },
-            { data: 'statut', title: 'Statut', type: 'status' },
-            { data: null, title: 'Actions', type: 'actions' }
+               { data: 'date_ordonnance', title: 'Date' },
+    { data: 'patient',         title: 'Patient' },
+    { data: 'medecin',         title: 'Médecin' },
+    { data: 'notes',           title: 'Ordonnance' }, // ✅ ici
+    { data: 'statut',          title: 'Statut' }
+          
         ],
         statuses: [
             { value: 'active', text: 'Active' },
@@ -407,8 +409,8 @@ $current_type = isset($_GET['type']) && isset($history_types[$_GET['type']]) ? $
             { data: 'patient', title: 'Patient', type: 'patient' },
             { data: 'medecin', title: 'Médecin', type: 'medecin' },
             { data: 'type_observation', title: 'Type', type: 'badge' },
-            { data: 'contenu', title: 'Contenu', type: 'text' },
-            { data: null, title: 'Actions', type: 'actions' }
+            { data: 'contenu', title: 'Contenu', type: 'text' }
+           
         ],
         statuses: []
     },
@@ -420,8 +422,8 @@ $current_type = isset($_GET['type']) && isset($history_types[$_GET['type']]) ? $
             { data: 'service_demandeur', title: 'Service', type: 'text' },
             { data: 'renseignement_clinique', title: 'Renseignements', type: 'text' },
             { data: 'age', title: 'Âge', type: 'text' },
-            { data: 'poids', title: 'Poids', type: 'text' },
-            { data: null, title: 'Actions', type: 'actions' }
+            { data: 'poids', title: 'Poids', type: 'text' }
+        
         ],
         statuses: []
     }
@@ -637,6 +639,7 @@ $current_type = isset($_GET['type']) && isset($history_types[$_GET['type']]) ? $
         function voirElement(id, type) {
             window.location.href = `voir_${type.slice(0, -1)}.php?id=${id}`;
         }
+        
 
         function modifierElement(id, type) {
             window.location.href = `modifier_${type.slice(0, -1)}.php?id=${id}`;

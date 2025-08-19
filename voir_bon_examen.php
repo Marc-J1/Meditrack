@@ -1,6 +1,9 @@
 <?php
 session_start();
+include 'includes/auto_track.php';
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
 
 if (!isset($_SESSION['user'])) {
     header("Location: login.php");

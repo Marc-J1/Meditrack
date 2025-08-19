@@ -15,6 +15,7 @@ if (session_status() === PHP_SESSION_NONE) {
 <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <!-- Icon Fonts -->
   <link rel="stylesheet" href="DattaAble-1.0.0/dist/assets/fonts/phosphor/duotone/style.css" />
@@ -46,3 +47,19 @@ if (session_status() === PHP_SESSION_NONE) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css">
+<script>
+  document.getElementById('sidebar-hide')?.addEventListener('click', function (e) {
+    e.preventDefault();
+    document.body.classList.toggle('pc-sidebar-hide');
+
+    // Si DataTable existe, on le redimensionne correctement
+    setTimeout(() => {
+      $('.dataTable').each(function () {
+        const table = $(this).DataTable();
+        if (table) {
+          table.columns.adjust().responsive?.recalc();
+        }
+      });
+    }, 300);
+  });
+</script>

@@ -1,6 +1,10 @@
 <?php
 session_start();
+include 'includes/auto_track.php';
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'Est entrer dans la page modifier medecin');
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     header("Location: login.php");
@@ -34,10 +38,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $statut = $_POST['statut'] ?? 'interimaire';
 
     if (!empty($nom) && !empty($mail)) {
+
+        // 🔍 Avant modification
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id_utilisateur = ?");
+        $stmt->execute([$id]);
+        $donnees_avant = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // ✅ Modification
         $update = $pdo->prepare("UPDATE users SET username = ?, phone_number = ?, address = ?, mail = ?, statut = ? WHERE id_utilisateur = ?");
         $success = $update->execute([$nom, $phone_number, $address, $mail, $statut, $id]);
 
         if ($success) {
+            // 🔍 Après modification
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE id_utilisateur = ?");
+            $stmt->execute([$id]);
+            $donnees_apres = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // 📝 Log
+            logUserManagementAction(
+                'modification',
+                $id,
+                $donnees_apres['username'],
+                'Modification du profil médecin',
+                $donnees_avant,
+                $donnees_apres
+            );
+
             header("Location: modifier_medecin.php?id=$id&success=1");
             exit();
         } else {
@@ -47,11 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = "Le nom et l'email sont requis.";
     }
 
-    // Recharge
+    // Recharge les données
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id_utilisateur = ?");
     $stmt->execute([$id]);
     $medecin = $stmt->fetch();
 }
+
 
 include 'includes/header.php';
 include 'includes/sidebar-admin.php';
@@ -88,7 +115,7 @@ include 'includes/sidebar-admin.php';
         <div class="col-span-12 md:col-span-6">
           <div class="card p-4">
             <label class="font-semibold">Address</label>
-            <input type="text" name="Address" class="form-control mt-1" value="<?= htmlspecialchars($medecin['address']) ?>">
+            <input type="text" name="address" class="form-control mt-1" value="<?= htmlspecialchars($medecin['address']) ?>">
           </div>
         </div>
 

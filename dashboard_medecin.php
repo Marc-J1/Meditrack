@@ -1,12 +1,21 @@
 <?php 
 session_start(); 
+
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+include 'includes/auto_track.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'A acceder au tableau de bord');
 
 // Vérifier que l'utilisateur est bien un médecin principal
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
     exit();
 }
+
+// 🆕 Récupération (puis purge) du message de bienvenue
+$__welcome = $_SESSION['welcome_message'] ?? '';
+if (!empty($__welcome)) { unset($_SESSION['welcome_message']); }
 
 // Récupération des dates de filtre
 if (isset($_GET['reset'])) {
@@ -22,12 +31,31 @@ include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
 ?>
 
+<!-- 🆕 Toast de bienvenue -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+  <?php if (!empty($__welcome)): ?>
+  <div id="welcomeToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body"><?= htmlspecialchars($__welcome) ?></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fermer"></button>
+    </div>
+  </div>
+  <?php endif; ?>
+</div>
+
 <!-- CSS personnalisé pour le dashboard -->
 <style>
+    
   input[type="date"] {
     color: #000 !important;
 }
-
+.page-header {
+            background: linear-gradient(135deg, #bdb3f7ff 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
 .filter-card {
     background: linear-gradient(135deg, #bdb3f7ff 0%, #764ba2 100%);
     color: white;
@@ -132,7 +160,6 @@ include 'includes/sidebar-medecin.php';
     </form>
   </div>
 </div>
-
 <script>
 // Remplit les dates et soumet automatiquement
 function setQuickRange(range) {
@@ -418,3 +445,14 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <?php include 'includes/footer.php'; ?>
+
+<!-- 🆕 Script d’affichage du toast -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const el = document.getElementById('welcomeToast');
+  if (el && typeof bootstrap !== 'undefined') {
+    const toast = new bootstrap.Toast(el, { delay: 3500 });
+    toast.show();
+  }
+});
+</script>

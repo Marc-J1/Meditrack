@@ -1,5 +1,6 @@
 <?php
 session_start();
+
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
     header("Location: login.php");
     exit();
@@ -8,6 +9,14 @@ if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
 require_once 'db.php';
 include 'includes/header.php';
 include 'includes/sidebar-admin.php';
+include 'includes/auto_track.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'A accedé au tableau de bord Administrateur');
+
+// 🆕 Récupération (puis purge) du message de bienvenue
+$__welcome = $_SESSION['welcome_message'] ?? '';
+if (!empty($__welcome)) { unset($_SESSION['welcome_message']); }
 
 if (isset($_GET['reset'])) {
     $date_debut = date('Y-m-01');
@@ -17,15 +26,27 @@ if (isset($_GET['reset'])) {
     $date_fin = $_GET['date_fin'] ?? date('Y-m-d');
 }
 
-$totalMedecins = $pdo->query("SELECT COUNT(*) FROM medecins")->fetchColumn();
+$totalMedecins = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'medecin'")->fetchColumn();
 $totalUsers = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(date_creation) BETWEEN ? AND ?");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'medecin' AND DATE(date_creation) BETWEEN ? AND ?");
 $stmt->execute([$date_debut, $date_fin]);
 $medecinsAjoutes = $stmt->fetchColumn();
-$stmt = $pdo->prepare("SELECT * FROM users WHERE DATE(date_creation) BETWEEN ? AND ? ORDER BY date_creation DESC");
+$stmt = $pdo->prepare("SELECT * FROM users WHERE role = 'medecin' AND DATE(date_creation) BETWEEN ? AND ? ORDER BY date_creation DESC");
 $stmt->execute([$date_debut, $date_fin]);
 $listeMedecins = $stmt->fetchAll();
 ?>
+
+<!-- 🆕 Toast de bienvenue -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+  <?php if (!empty($__welcome)): ?>
+  <div id="welcomeToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body"><?= htmlspecialchars($__welcome) ?></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fermer"></button>
+    </div>
+  </div>
+  <?php endif; ?>
+</div>
 
 <style>
 input[type="date"] {
@@ -36,6 +57,13 @@ input[type="date"] {
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+.page-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
 .stat-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -187,3 +215,14 @@ input[type="date"] {
 </div>
 
 <?php include 'includes/footer.php'; ?>
+
+<!-- 🆕 Script d’affichage du toast -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const el = document.getElementById('welcomeToast');
+  if (el && typeof bootstrap !== 'undefined') {
+    const toast = new bootstrap.Toast(el, { delay: 3500 });
+    toast.show();
+  }
+});
+</script>

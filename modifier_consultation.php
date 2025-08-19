@@ -1,6 +1,10 @@
 <?php
 session_start();
+include 'includes/auto_track.php';
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'Est entrer dans la page modifer consultation');
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
@@ -30,7 +34,6 @@ if (!$consultation) {
 }
 
 $patient_id = $consultation['id_patient'];
-$message = '';
 $error = '';
 
 // Traitement du formulaire
@@ -47,8 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $pdo->prepare("UPDATE consultations SET date_consultation = ?, motif = ?, diagnostic = ?, notes = ?, statut = ? WHERE id = ?");
             $stmt->execute([$date_consultation, $motif, $diagnostic, $notes, $statut, $consultation_id]);
-            $message = "Consultation modifiée avec succès.";
-            header("refresh:2;url=voir_consultation.php?id=$consultation_id");
+
+            $patient_nom = $consultation['nom'] . ' ' . $consultation['prenom'];
+            logModification('modifier_consultation.php', "Consultation modifiée pour $patient_nom (ID consultation: $consultation_id)");
+
+            // Redirection avec indicateur de succès
+            header("Location: modifier_consultation.php?id=" . (int)$consultation_id . "&success=modification");
+            exit();
         } catch (Exception $e) {
             $error = "Erreur lors de la modification : " . $e->getMessage();
         }
@@ -58,6 +66,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
 ?>
+
+<!-- Toast SweetAlert -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<?php if (isset($_GET['success']) && $_GET['success'] === 'modification'): ?>
+<script>
+Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'success',
+    title: 'Consultation modifiée avec succès.',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#333',
+    color: '#fff',
+});
+</script>
+<?php endif; ?>
 
 <div class="pc-container">
   <div class="pc-content">
@@ -84,16 +110,11 @@ include 'includes/sidebar-medecin.php';
       </div>
     </div>
 
-    <!-- Messages -->
-    <?php if ($message): ?>
-    <div class="alert alert-success"><?= $message ?></div>
-    <?php endif; ?>
-
     <?php if ($error): ?>
     <div class="alert alert-danger"><?= $error ?></div>
     <?php endif; ?>
 
-    <!-- Formulaire de modification -->
+    <!-- Formulaire -->
     <div class="card">
       <div class="card-header">
         <h5 class="card-title mb-0"><i class="ti ti-edit"></i> Modifier les détails</h5>

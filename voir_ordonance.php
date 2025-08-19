@@ -1,6 +1,10 @@
 <?php
 session_start();
+include 'includes/auto_track.php';
 require_once 'db.php';
+require_once 'includes/activity_logger.php';
+$activityLogger = initActivityLogger($pdo);
+logPageVisit(basename($_SERVER['PHP_SELF']), 'Consulte une ordonnance');
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     header("Location: login.php");
@@ -50,63 +54,77 @@ include 'includes/sidebar-medecin.php';
 
 <div class="pc-container">
   <div class="pc-content">
+    <!-- Titre + boutons -->
     <div class="page-header d-flex justify-content-between align-items-center">
       <h4 class="mb-3">Détails de l'Ordonnance</h4>
-      <div>
-        <a href="<?= $retour_url ?>" class="btn btn-secondary">
-          <i class="ti ti-arrow-left"></i> <?= $retour_text ?>
+      <div class="d-flex gap-2">
+        <a href="<?= htmlspecialchars($retour_url) ?>" class="btn btn-secondary">
+          <i class="ti ti-arrow-left"></i> <?= htmlspecialchars($retour_text) ?>
         </a>
 
         <?php if ($ordonnance['statut'] === 'active'): ?>
-        <a href="modifier_ordonnance.php?id=<?= $ordonnance['id'] ?>" class="btn btn-primary">
-          <i class="ti ti-edit"></i> Modifier
-        </a>
+          <a href="modifier_ordonnance.php?id=<?= htmlspecialchars($ordonnance['id']) ?>" class="btn btn-primary">
+            <i class="ti ti-edit"></i> Modifier
+          </a>
         <?php endif; ?>
+
+        <a href="generer_ordonnance.php?id=<?= htmlspecialchars($ordonnance['id']) ?>" class="btn btn-secondary" target="_blank">
+          <i class="ti ti-printer"></i> Imprimer
+        </a>
       </div>
     </div>
 
-    <!-- Informations du patient -->
+    <!-- Informations du patient : cartes en ligne -->
     <div class="card mb-4">
       <div class="card-header">
         <h5 class="card-title mb-0"><i class="ti ti-user"></i> Informations Patient</h5>
       </div>
-      <div class="grid grid-cols-12 gap-4 p-4">
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Nom :</label>
-            <p class="form-control-plaintext"><?= htmlspecialchars($ordonnance['nom']) ?></p>
-          </div>
-        </div>
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Prénom :</label>
-            <p class="form-control-plaintext"><?= htmlspecialchars($ordonnance['prenom']) ?></p>
-          </div>
-        </div>
 
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Sexe :</label>
-            <p class="form-control-plaintext"><?= htmlspecialchars($ordonnance['sexe']) ?></p>
+      <div class="card-body">
+        <div class="row g-3 align-items-stretch">
+          <div class="col-md-3">
+            <div class="card h-100 p-3">
+              <div class="text-muted small">Nom complet</div>
+              <?php
+                $civilite = (strtoupper(trim((string)$ordonnance['sexe'])) === 'F') ? 'Mme' : 'Ms';
+                $nom_complet = $civilite . ' ' . $ordonnance['nom'] . ' ' . $ordonnance['prenom'];
+              ?>
+              <div class="fw-semibold"><?= htmlspecialchars($nom_complet) ?></div>
+            </div>
           </div>
-        </div>
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Date de naissance :</label>
-            <p class="form-control-plaintext"><?= date('d/m/Y', strtotime($ordonnance['date_naissance'])) ?></p>
-          </div>
-        </div>
 
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Âge :</label>
-            <p class="form-control-plaintext"><?= $age ?> ans</p>
+          <div class="col-md-2">
+            <div class="card h-100 p-3">
+              <div class="text-muted small">Sexe</div>
+              <div class="fw-semibold"><?= htmlspecialchars($ordonnance['sexe']) ?></div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card h-100 p-3">
+              <div class="text-muted small">Date de naissance</div>
+              <div class="fw-semibold"><?= date('d/m/Y', strtotime($ordonnance['date_naissance'])) ?></div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card h-100 p-3">
+              <div class="text-muted small">Âge</div>
+              <div class="fw-semibold"><?= htmlspecialchars($age) ?> ans</div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card h-100 p-3">
+              <div class="text-muted small">Médecin</div>
+              <div class="fw-semibold"><?= htmlspecialchars($ordonnance['nom_medecin']) ?></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Détails de l'ordonnance -->
+    <!-- Détails de l'ordonnance : structure soignée -->
     <div class="card mb-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
@@ -116,70 +134,25 @@ include 'includes/sidebar-medecin.php';
           <?= ucfirst(htmlspecialchars($ordonnance['statut'])) ?>
         </span>
       </div>
-      <div class="grid grid-cols-12 gap-4 p-4">
-        <!-- Médecin -->
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Médecin :</label>
-            <p class="form-control-plaintext"><?= htmlspecialchars($ordonnance['nom_medecin']) ?></p>
-          </div>
-        </div>
 
-        <!-- Médicaments -->
-        <div class="col-span-12">
-          <div class="card p-4">
-            <label class="font-semibold">Médicaments prescrits :</label>
-            <div class="border rounded bg-light p-3"><?= nl2br(htmlspecialchars($ordonnance['medicaments'])) ?></div>
-          </div>
-        </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <!-- (Durée/Medicaments/Posologie non utilisés désormais : on ne les affiche pas) -->
 
-        <?php if (!empty($ordonnance['posologie'])): ?>
-        <div class="col-span-12">
-          <div class="card p-4">
-            <label class="font-semibold">Posologie :</label>
-            <div class="border rounded bg-light p-3"><?= nl2br(htmlspecialchars($ordonnance['posologie'])) ?></div>
+          <!-- ✅ Ordonnance (notes) -->
+          <?php if (!empty($ordonnance['notes'])): ?>
+          <div class="col-12">
+            <div class="card p-3">
+              <div class="text-muted small mb-2">Ordonnance</div>
+              <div class="border rounded bg-light p-3"><?= nl2br(htmlspecialchars($ordonnance['notes'])) ?></div>
+            </div>
           </div>
+          <?php endif; ?>
         </div>
-        <?php endif; ?>
-
-        <?php if (!empty($ordonnance['duree_traitement'])): ?>
-        <div class="col-span-12 md:col-span-6">
-          <div class="card p-4">
-            <label class="font-semibold">Durée du traitement :</label>
-            <p class="form-control-plaintext"><?= htmlspecialchars($ordonnance['duree_traitement']) ?></p>
-          </div>
-        </div>
-        <?php endif; ?>
-
-        <?php if (!empty($ordonnance['notes'])): ?>
-        <div class="col-span-12">
-          <div class="card p-4">
-            <label class="font-semibold">Notes et recommandations :</label>
-            <div class="border rounded bg-light p-3"><?= nl2br(htmlspecialchars($ordonnance['notes'])) ?></div>
-          </div>
-        </div>
-        <?php endif; ?>
       </div>
     </div>
 
-    <!-- Actions -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <h5 class="card-title mb-0"><i class="ti ti-settings"></i> Actions</h5>
-      </div>
-      <div class="card-body d-flex gap-2 flex-wrap">
-        <a href="ordonance_patient.php?id=<?= $ordonnance['id_patient'] ?>" class="btn btn-success">
-          <i class="ti ti-plus"></i> Nouvelle ordonnance
-        </a>
-        <a href="ajouter_observation.php?id_patient=<?= $ordonnance['id_patient'] ?>" class="btn btn-info">
-          <i class="ti ti-eye"></i> Nouvelle observation
-        </a>
-        <a href="generer_ordonnance.php?id=<?= $ordonnance['id'] ?>" class="btn btn-secondary" target="_blank">
-          <i class="ti ti-printer"></i> Imprimer
-        </a>
-      </div>
-    </div>
-
+    <!-- (Section Actions supprimée comme demandé) -->
   </div>
 </div>
 

@@ -328,7 +328,6 @@ document.addEventListener("DOMContentLoaded", function () {
       clearError(telHidden);
       return true;
     }
-
     return true;
   }
 

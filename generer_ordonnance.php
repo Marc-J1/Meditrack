@@ -3,18 +3,17 @@ session_start();
 require('fpdf/fpdf.php');
 require_once 'db.php';
 
-// Vérification de session médecin
+// ---- Vérif session & param ----
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'medecin') {
     exit("Accès refusé.");
 }
 if (!isset($_GET['id'])) {
     exit("Ordonnance non spécifiée.");
 }
-
 $id_ordonnance = (int)$_GET['id'];
 $id_medecin    = (int)$_SESSION['user']['id'];
 
-// --- Récupération de l'ordonnance + patient
+// ---- Récupération ordonnance + patient ----
 $stmt = $pdo->prepare("
     SELECT o.*,
            p.nom    AS patient_nom,
@@ -28,48 +27,17 @@ $stmt = $pdo->prepare("
 $stmt->execute([$id_ordonnance]);
 $ord = $stmt->fetch();
 
-if (!$ord || $ord['id_utilisateur'] != $id_medecin) {
+// Si ta table 'ordonnances' ne contient pas 'id_utilisateur', supprime le test suivant :
+if (!$ord || (isset($ord['id_utilisateur']) && (int)$ord['id_utilisateur'] !== $id_medecin)) {
     exit("Ordonnance non trouvée ou accès interdit.");
 }
 
-// --- Récupération du médecin
+// ---- Récupération médecin ----
 $stmtM = $pdo->prepare("SELECT username, phone_number FROM users WHERE id_utilisateur = ?");
 $stmtM->execute([$id_medecin]);
 $doc = $stmtM->fetch();
 
-// ===== Création PDF =====
-$pdf = new FPDF();
-$pdf->AddPage();
-$pdf->SetFont('Arial','',12);
-
-// --- Infos médecin en haut à gauche ---
-$pdf->Cell(0,6,utf8_decode("Docteur : ".$doc['username']),0,1,'L');
-$pdf->Cell(0,6,utf8_decode("Tél : ".($doc['phone_number'] ?: "Non renseigné")),0,1,'L');
-$pdf->Cell(0,6,utf8_decode("Consultation de médecine interne"),0,1,'L');
-$pdf->Cell(0,6,utf8_decode("Brazzaville"),0,1,'L');
-
-$pdf->Ln(15);
-
-// --- Titre Ordonnance (avant la date) ---
-$pdf->SetFont('Arial','B',14);
-$pdf->Cell(0,10,utf8_decode("Ordonnance Médicale"),0,1,'C');
-
-// --- Date ---
-$pdf->SetFont('Arial','',12);
-$pdf->Cell(0,8,utf8_decode("Date : ".date('d/m/Y', strtotime($ord['date_ordonnance']))),0,1,'C');
-
-$pdf->Ln(10);
-
-// --- Infos patient ---
-
-$pdf->SetFont('Arial','',12);
-$pdf->Cell(0,8,utf8_decode("Ms/Mme : ".' '.$ord['patient_nom']." ".$ord['patient_prenom']),0,1,'L');
-
-$pdf->Ln(15);
-
-/* --------- CONTENU DE L’ORDONNANCE ---------
-   On affiche NOTES en priorité (c’est là où tout est saisi maintenant).
-   Si NOTES est vide, fallback vers medicaments/posologie/duree_traitement. */
+// ---- Préparation contenu (même logique que ton code) ----
 $parts = [];
 if (!empty($ord['notes'])) {
     $parts[] = trim($ord['notes']);
@@ -81,14 +49,101 @@ if (!empty($ord['notes'])) {
 $contenu = trim(implode("\n\n", $parts));
 if ($contenu === '') $contenu = "—";
 
-// --- Bloc ordonnance : centré visuellement sans toucher aux marges ---
-$pdf->SetFont('Arial','',12);
-$blockWidth = 160;                      // largeur du bloc (ajuste à 170/150 si tu veux)
-$pageWidth  = $pdf->GetPageWidth();     // A4 ≈ 210mm
-$leftX      = ($pageWidth - $blockWidth) / 2;
+// ==== Création PDF A4 PAYSAGE avec 2 panneaux A5 PORTRAIT ====
+$pdf = new FPDF('L', 'mm', 'A4');
 
-$pdf->SetX($leftX);
-$pdf->MultiCell($blockWidth, 8, utf8_decode($contenu), 0, 'L'); // aligné à gauche à l’intérieur d’un bloc centré
+// Définis tes marges externes ici (et réutilise ces variables)
+$outerLeft   = 10;
+$outerTop    = 10;
+$outerRight  = 10;
+$outerBottom = 10;
+
+$pdf->SetMargins($outerLeft, $outerTop, $outerRight);
+$pdf->SetAutoPageBreak(false);
+$pdf->AddPage();
+
+// Dimensions page
+$pageW = $pdf->GetPageWidth();   // ≈ 297mm
+$pageH = $pdf->GetPageHeight();  // ≈ 210mm
+
+// Paramétrage colonnes A5
+$gutter = 6; // espace central
+
+// Largeur disponible pour 2 colonnes
+$availW = $pageW - $outerLeft - $outerRight - $gutter;
+// Largeur d'un panneau
+$panelW = $availW / 2;
+// Hauteur d'un panneau
+$panelH = $pageH - $outerTop - $outerBottom;
+
+// Coordonnées panneaux
+$panel1X = $outerLeft;
+$panel1Y = $outerTop;
+
+$panel2X = $outerLeft + $panelW + $gutter;
+$panel2Y = $panel1Y;
+
+// (Optionnel) Cadre de découpe
+function drawPanelBorder($pdf, $x, $y, $w, $h) {
+    $pdf->SetDrawColor(180,180,180);
+    $pdf->SetLineWidth(0.2);
+    $pdf->Rect($x, $y, $w, $h);
+}
+
+// Rendu d’un exemplaire (garde ton “design” : mêmes polices/alignements)
+function renderPrescriptionPanel($pdf, $x, $y, $w, $h, $doc, $ord, $contenu) {
+    // Marges internes du panneau
+    $inset  = 10;                 // marge interne
+    $innerX = $x + $inset;
+    $innerY = $y + $inset;
+    $innerW = $w - 2*$inset;
+
+    // ---- En-tête médecin (gauche) ----
+    $pdf->SetFont('Arial','',12);
+    $pdf->SetXY($innerX, $innerY);
+    $pdf->Cell($innerW, 6, utf8_decode("Docteur : ".($doc['username'] ?? '')), 0, 2, 'L');
+    $pdf->Cell($innerW, 6, utf8_decode("Tél : ".(!empty($doc['phone_number']) ? $doc['phone_number'] : "Non renseigné")), 0, 2, 'L');
+    $pdf->Cell($innerW, 6, utf8_decode("Consultation de médecine interne"), 0, 2, 'L');
+    $pdf->Cell($innerW, 6, utf8_decode("Brazzaville"), 0, 2, 'L');
+
+    $pdf->Ln(6);
+
+    // ---- Titre centré ----
+    $pdf->SetFont('Arial','B',14);
+    $pdf->SetX($innerX);
+    $pdf->Cell($innerW, 10, utf8_decode("Ordonnance Médicale"), 0, 2, 'C');
+
+    // ---- Date centrée ----
+    $pdf->SetFont('Arial','',12);
+    $dateTxt = "Date : ".date('d/m/Y', strtotime($ord['date_ordonnance']));
+    $pdf->SetX($innerX);
+    $pdf->Cell($innerW, 8, utf8_decode($dateTxt), 0, 2, 'C');
+
+    $pdf->Ln(3);
+
+    // ---- Infos patient (gauche) ----
+    $patientLine = "M/Mme : ".($ord['patient_nom'] ?? '')." ".($ord['patient_prenom'] ?? '');
+    $pdf->SetX($innerX);
+    $pdf->Cell($innerW, 8, utf8_decode($patientLine), 0, 2, 'L');
+
+    $pdf->Ln(4);
+
+    // ---- Bloc contenu principal ----
+    $blockW = min($innerW, 160);          // largeur contrôlée (ton ancien 160)
+    $leftX  = $innerX + ($innerW - $blockW) / 2;
+
+    $pdf->SetFont('Arial','',12);
+    $pdf->SetXY($leftX, $pdf->GetY());
+    $pdf->MultiCell($blockW, 8, utf8_decode($contenu), 0, 'L');
+}
+
+// (Optionnel) Bordures de découpe
+drawPanelBorder($pdf, $panel1X, $panel1Y, $panelW, $panelH);
+drawPanelBorder($pdf, $panel2X, $panel2Y, $panelW, $panelH);
+
+// Rendu des 2 exemplaires
+renderPrescriptionPanel($pdf, $panel1X, $panel1Y, $panelW, $panelH, $doc, $ord, $contenu);
+renderPrescriptionPanel($pdf, $panel2X, $panel2Y, $panelW, $panelH, $doc, $ord, $contenu);
 
 // Sortie
 $pdf->Output("I", "ordonnance_".$ord['id'].".pdf");

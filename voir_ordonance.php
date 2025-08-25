@@ -50,8 +50,31 @@ $age = (new DateTime())->diff($date_naissance)->y;
 
 include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
-?>
 
+?>
+<!-- Toast SweetAlert (succès) -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<?php
+// on accepte success=1 (création) OU success=ordonnance (créée depuis une consultation)
+$success = $_GET['success'] ?? null;
+if ($success === '1' || $success === 'ordonnance'):
+?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'success',
+    title: "Ordonnance créée avec succès",
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#2e7d32',
+    color: '#fff'
+  });
+});
+</script>
+<?php endif; ?>
 <div class="pc-container">
   <div class="pc-content">
     <!-- Titre + boutons -->

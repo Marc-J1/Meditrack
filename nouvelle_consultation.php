@@ -17,7 +17,7 @@ if (!isset($_GET['id'])) {
     exit();
 }
 
-$patient_id = $_GET['id'];
+$patient_id = (int) $_GET['id'];
 
 // Récupérer les informations du patient
 $stmt = $pdo->prepare("SELECT * FROM patients WHERE id_patient = ?");
@@ -25,7 +25,7 @@ $stmt->execute([$patient_id]);
 $patient = $stmt->fetch();
 
 if (!$patient) {
-    header("Location: lister_patients.php?error=Patient non trouvé");
+    header("Location: lister_patients.php?error=Patient%20non%20trouv%C3%A9");
     exit();
 }
 
@@ -59,14 +59,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "La date et le motif de consultation sont obligatoires.";
     } else {
         try {
-            // ✅ AJOUT de la colonne notes dans l’INSERT
+            // ID utilisateur depuis la session (compatibilité deux clés possibles)
+            $id_utilisateur = $_SESSION['user']['id_utilisateur'] ?? ($_SESSION['user']['id'] ?? null);
+            if (!$id_utilisateur) {
+                throw new Exception("Utilisateur non identifié (id_utilisateur manquant en session).");
+            }
+
+            // ✅ Insert avec la colonne notes
             $stmt = $pdo->prepare("
                 INSERT INTO consultations (id_patient, id_utilisateur, date_consultation, motif, diagnostic, notes, statut)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $patient_id,
-                $_SESSION['user']['id'],
+                $id_utilisateur,
                 $date_consultation,
                 $motif,
                 $diagnostic,
@@ -74,13 +80,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statut
             ]);
 
-            $lastId = $pdo->lastInsertId();
-            $patient_nom = $patient['nom'] . ' ' . $patient['prenom'];
+            $lastId = (int) $pdo->lastInsertId();
+
+            $patient_nom = trim(($patient['nom'] ?? '') . ' ' . ($patient['prenom'] ?? ''));
             logCreation('consultation.php', "Nouvelle consultation pour $patient_nom (ID patient: $patient_id)");
 
-            // ✅ Redirige sur la même page avec un toast de succès,
-            //   ET lien vers la consultation créée
-            header("Location: voir_consultation.php?id={$patient_id}&success=1&consultation_id={$lastId}");
+            // ✅ SOLUTION A : rediriger vers la page de vue AVEC id = ID_CONSULTATION
+            // et conserver l'ID patient séparément
+            header("Location: voir_consultation.php?id={$lastId}&success=1&patient_id={$patient_id}");
             exit();
         } catch (Exception $e) {
             $error = "Erreur lors de l'ajout de la consultation : " . $e->getMessage();
@@ -92,7 +99,7 @@ include 'includes/header.php';
 include 'includes/sidebar-medecin.php';
 ?>
 
-<!-- SweetAlert pour le toast de succès -->
+<!-- SweetAlert pour le toast de succès (gardé si jamais tu ré-utilises ce pattern ici plus tard) -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <div class="pc-container">
@@ -116,12 +123,12 @@ include 'includes/sidebar-medecin.php';
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <strong><?= htmlspecialchars($patient['nom'] . ' ' . $patient['prenom']) ?></strong>
+                        <strong><?= htmlspecialchars(($patient['nom'] ?? '') . ' ' . ($patient['prenom'] ?? '')) ?></strong>
                     </div>
                     <div class="col-md-6">
                         <span class="text-muted">
-                            <?= htmlspecialchars($patient['sexe']) ?> - 
-                            <?= date('d/m/Y', strtotime($patient['date_naissance'])) ?>
+                            <?= htmlspecialchars($patient['sexe'] ?? '') ?> - 
+                            <?= isset($patient['date_naissance']) ? date('d/m/Y', strtotime($patient['date_naissance'])) : '' ?>
                         </span>
                     </div>
                 </div>
@@ -141,25 +148,6 @@ include 'includes/sidebar-medecin.php';
             <i class="ti ti-alert-circle"></i> <?= htmlspecialchars($error) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        <?php endif; ?>
-
-        <!-- Toast succès après redirection -->
-        <?php if (isset($_GET['success']) && $_GET['success'] == '1'): ?>
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            Swal.fire({
-                toast: true,
-                position: 'top-end',
-                icon: 'success',
-                title: 'Consultation enregistrée avec succès',
-                showConfirmButton: false,
-                timer: 3000,
-                timerProgressBar: true,
-                background: '#333',
-                color: '#fff'
-            });
-        });
-        </script>
         <?php endif; ?>
 
         <!-- Formulaire de consultation -->
@@ -217,8 +205,12 @@ include 'includes/sidebar-medecin.php';
                             <i class="ti ti-x"></i> Annuler
                         </a>
 
-                        <?php if (isset($_GET['consultation_id'])): ?>
-                          <a href="voir_consultation.php?id=<?= (int)$_GET['consultation_id'] ?>" class="btn btn-outline-success">
+                        <?php
+                        // NOTE : avec la solution A, on redirige vers voir_consultation.php,
+                        // donc ce bouton ne sera normalement pas affiché juste après l'enregistrement.
+                        // Je le laisse ici au cas où tu recharges la page avec des paramètres ad hoc.
+                        if (isset($_GET['success']) && $_GET['success'] == '1' && isset($_GET['id'])): ?>
+                          <a href="voir_consultation.php?id=<?= (int)$_GET['id'] ?>" class="btn btn-outline-success">
                             <i class="ti ti-eye"></i> Voir la consultation
                           </a>
                         <?php endif; ?>
